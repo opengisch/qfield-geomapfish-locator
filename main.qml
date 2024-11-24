@@ -53,5 +53,17 @@ Item {
       locatorBridge.locatorHighlightGeometry.qgsGeometry = result.userData;
       locatorBridge.locatorHighlightGeometry.crs = CoordinateReferenceSystemUtils.fromDescription(parameters["service_crs"]);
     }
+
+    function triggerResultFromAction(result, actionId) {
+      if (actionId === 1) {
+        let navigation = iface.findItemByObjectName('navigation')
+        const centroid = GeometryUtils.reprojectPoint(
+          GeometryUtils.centroid(result.userData),
+          CoordinateReferenceSystemUtils.fromDescription(parameters["service_crs"]),
+          mapCanvas.mapSettings.destinationCrs
+        )
+        navigation.destination = centroid
+      }
+    }
   }
 }

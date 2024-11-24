@@ -22,7 +22,12 @@ Item {
             "description": "",
             "score": 1,
             "group": feature.attribute('layer_name'),
-            "groupScore":1
+            "groupScore":1,
+            "actions": [{
+              "id": 1,
+              "name": "Set as destination",
+              "icon": "qrc:/themes/qfield/nodpi/ic_navigation_flag_purple_24dp.svg"
+            }]
           };
           prepareResult(details);
         }
