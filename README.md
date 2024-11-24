@@ -16,7 +16,7 @@ To start searches once the plugin is installed, expand the search bar, type
 the prefix osm followed by the search string, and wait for the GeoMapFish
 service to provide you with results:
 
-[Screencast](screencast.webm)
+[Screencast](https://github.com/user-attachments/assets/63ae86c2-b59c-4a7f-ae73-1c39ee2bafe8)
 
 ## Customization
 
