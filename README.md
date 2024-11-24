@@ -10,9 +10,21 @@ To install the plugin, [download the plugin from the releases page](https://gith
 and follow the [plugin installation guide](https://docs.qfield.org/how-to/plugins/#application-plugins) to install
 the zipped plugin in QField.
 
-## Service customization
+## Usage
+
+To start searches once the plugin is installed, expand the search bar, type
+the prefix osm followed by the search string, and wait for the GeoMapFish
+service to provide you with results:
+
+[Screencast](screencast.webm)
+
+## Customization
 
 Users and plugin authors are encouraged to explore the plugin code. To change
 the GeoMapFish service used by the plugin, look for the the "service_url"
-and "service_crs" parameters attached to the QFieldLocatorFilter item
-in main.qml 
+and "service_crs" attached to the parameters property of the QFieldLocatorFilter
+item in main.qml 
+
+You can customize the search bar prefix by changing the prefix property 
+of the QFieldLocatorFilter item. By having unique prefixes, you can
+integrate multiple services.
