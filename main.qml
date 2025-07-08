@@ -47,7 +47,13 @@ Item {
       "service_crs": settings.service_crs
     }
     source: Qt.resolvedUrl('geomapfish.qml')
-  
+
+    Component.onCompleted: {
+      if (geoMapFishLocatorFilter.description !== undefined) {
+        geoMapFishLocatorFilter.description = "Returns GeoMapFish search results."
+      }
+    }
+
     function triggerResult(result) {
       if (result.userData.type === Qgis.GeometryType.Point) {
         const centroid = GeometryUtils.reprojectPoint(
