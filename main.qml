@@ -1,18 +1,22 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-
 import QtCore
-
 import org.qfield
 import org.qgis
 import Theme
 
 Item {
   id: plugin
-
   property var mainWindow: iface.mainWindow()
   property var mapCanvas: iface.mapCanvas()
+
+  readonly property var presets: [
+    { name: "GeoMapFish Demo", url: "https://geomapfish-demo-2-9.camptocamp.com/search", crs: "EPSG:2056" },
+    { name: "SIGIP", url: "https://www.sigip.ch/search", crs: "EPSG:2056" },
+    { name: "Cartoriviera", url: "https://map.cartoriviera.ch/search", crs: "EPSG:2056" },
+    { name: "SITN", url: "https://sitn.ne.ch/search", crs: "EPSG:2056" }
+  ]
 
   Component.onCompleted: {
     geoMapFishLocatorFilter.locatorBridge.registerQFieldLocatorFilter(geoMapFishLocatorFilter);
@@ -26,11 +30,22 @@ Item {
     id: settings
     category: "qfield-geomapfish-locator"
 
-    property string service_url: "https://geomapfish-demo-2-9.camptocamp.com/search"
-    property string service_crs: "EPSG:2056"
+    property string selected_preset: "GeoMapFish Demo"
+    property string custom_url: ""
+    property string custom_crs: "EPSG:2056"
+    property string saved_custom_endpoints: "[]"
+  }
 
-    // user pinned urls (json array)
-    property string pinned_service_urls: "[]"
+  function getActivePreset() {
+    return presets.find(p => p.name === settings.selected_preset) || presets[0];
+  }
+
+  function getActiveUrl() {
+    return settings.custom_url || getActivePreset().url;
+  }
+
+  function getActiveCrs() {
+    return settings.custom_url ? settings.custom_crs : getActivePreset().crs;
   }
 
   function configure() {
@@ -39,15 +54,13 @@ Item {
 
   QFieldLocatorFilter {
     id: geoMapFishLocatorFilter
-
     name: "GeoMapFish"
     displayName: "GeoMapFish"
     prefix: "gmf"
     locatorBridge: iface.findItemByObjectName('locatorBridge')
-
     parameters: {
-      "service_url": settings.service_url,
-      "service_crs": settings.service_crs
+      "service_url": plugin.getActiveUrl(),
+      "service_crs": plugin.getActiveCrs()
     }
     source: Qt.resolvedUrl('geomapfish.qml')
 
@@ -99,138 +112,145 @@ Item {
     font: Theme.defaultFont
     standardButtons: Dialog.Ok | Dialog.Cancel
     title: qsTr("GeoMapFish search settings")
-
     x: (mainWindow.width - width) / 2
     y: (mainWindow.height - height) / 2
-
     width: mainWindow.width * 0.8
 
-    property string pendingServiceUrl: settings.service_url
-    property bool showCustomInput: false
+    property var savedCustomEndpoints: []
+    property string customPlaceholder: "Custom"
 
-    ListModel { id: serviceUrlModel }
-
-    function normalizeUrl(url) {
-      return (url || "").trim()
-    }
-
-    function loadPinnedUrls() {
-      let arr = []
+    function loadSavedCustomEndpoints() {
       try {
-        arr = JSON.parse(settings.pinned_service_urls)
+        const parsed = JSON.parse(settings.saved_custom_endpoints);
+        savedCustomEndpoints = Array.isArray(parsed) ? parsed : [];
       } catch (e) {
-        arr = []
-      }
-      if (!Array.isArray(arr)) {
-        arr = []
-      }
-
-      let clean = []
-      for (let i = 0; i < arr.length; i++) {
-        const normalUrl = normalizeUrl(arr[i])
-        if (!normalUrl) {
-          continue
-        }
-        if (clean.indexOf(normalUrl) === -1) {
-          clean.push(normalUrl)
-        }
-      }
-      return clean
-    }
-
-    function savePinnedUrls(arr) {
-      settings.pinned_service_urls = JSON.stringify(arr)
-    }
-
-    function isPinned(url) {
-      url = normalizeUrl(url)
-      if (!url) return false
-      return loadPinnedUrls().indexOf(url) !== -1
-    }
-
-    function rebuildModel() {
-      serviceUrlModel.clear()
-
-      const pinned = loadPinnedUrls()
-      for (let i = 0; i < pinned.length; i++) {
-        serviceUrlModel.append({ text: pinned[i], url: pinned[i], isCustom: false })
-      }
-
-      serviceUrlModel.append({ text: qsTr("Custom"), url: "__custom__", isCustom: true })
-    }
-
-    function setSelectionFromUrl(url) {
-      url = normalizeUrl(url)
-      settingsDialog.pendingServiceUrl = url
-
-      const pinned = loadPinnedUrls()
-      const idx = pinned.indexOf(url)
-
-      if (idx !== -1) {
-        // select pinned, hide custom input
-        serviceUrlCombo.currentIndex = idx
-        settingsDialog.showCustomInput = false
-        customServiceUrlTextField.text = url
-      } else {
-        // select custom, show input
-        serviceUrlCombo.currentIndex = serviceUrlModel.count - 1
-        settingsDialog.showCustomInput = true
-        customServiceUrlTextField.text = url
+        savedCustomEndpoints = [];
       }
     }
 
-    function pinUrl(url) {
-      url = normalizeUrl(url)
-      if (!url)
-      {
-        return
-      }
-
-      //avoid obvious invalid entries
-      if (url.indexOf("http://") !== 0 && url.indexOf("https://") !== 0) {
-        mainWindow.displayToast(qsTr("Please enter a valid http(s) URL"))
-        return
-      }
-
-      let pinned = loadPinnedUrls()
-      if (pinned.indexOf(url) === -1) {
-        pinned.unshift(url) // newest first
-        savePinnedUrls(pinned)
-      }
-
-      rebuildModel()
-      setSelectionFromUrl(url) // switches to pinned -> hides input
+    function findPreset(name) {
+      return presets.find(p => p.name === name);
     }
 
-    function unpinUrl(url) {
-      url = normalizeUrl(url)
-      if (!url)
-      {
-        return
+    function findCustomEndpoint(url) {
+      return savedCustomEndpoints.find(e => e.url === url);
+    }
+
+    function isValidUrl(url) {
+      return url.startsWith("http://") || url.startsWith("https://");
+    }
+
+    function saveCustomEndpoint(url, crs) {
+      if (!url || !isValidUrl(url)) return;
+
+      savedCustomEndpoints = savedCustomEndpoints.filter(e => e.url !== url);
+      savedCustomEndpoints.unshift({ url: url, crs: crs });
+
+      if (savedCustomEndpoints.length > 10) {
+        savedCustomEndpoints = savedCustomEndpoints.slice(0, 10);
       }
 
-      let pinned = loadPinnedUrls()
-      const idx = pinned.indexOf(url)
-      if (idx !== -1) {
-        pinned.splice(idx, 1)
-        savePinnedUrls(pinned)
-      }
+      settings.saved_custom_endpoints = JSON.stringify(savedCustomEndpoints);
+    }
 
-      rebuildModel()
-      // after unpin -> go to Custom with the same url
-      serviceUrlCombo.currentIndex = serviceUrlModel.count - 1
-      settingsDialog.pendingServiceUrl = url
-      settingsDialog.showCustomInput = true
-      customServiceUrlTextField.text = url
-      customServiceUrlTextField.forceActiveFocus()
+    function deleteSelectedCustom() {
+      const item = serviceCombo.model[serviceCombo.currentIndex];
+      if (!item || !item.isCustom) return;
+
+      savedCustomEndpoints = savedCustomEndpoints.filter(e => e.url !== item.url);
+      settings.saved_custom_endpoints = JSON.stringify(savedCustomEndpoints);
+
+      rebuildComboModel();
+      serviceCombo.currentIndex = serviceCombo.model.length - 1;
+      updateFromSelection();
+    }
+
+    function rebuildComboModel() {
+      let items = [];
+
+      presets.forEach(preset => {
+        items.push({
+          label: preset.name,
+          url: preset.url,
+          crs: preset.crs,
+          isPreset: true,
+          isCustom: false,
+          isPlaceholder: false
+        });
+      });
+
+      savedCustomEndpoints.forEach(endpoint => {
+        items.push({
+          label: endpoint.url,
+          url: endpoint.url,
+          crs: endpoint.crs,
+          isPreset: false,
+          isCustom: true,
+          isPlaceholder: false
+        });
+      });
+
+      items.push({
+        label: customPlaceholder,
+        url: "",
+        crs: settings.custom_crs,
+        isPreset: false,
+        isCustom: false,
+        isPlaceholder: true
+      });
+
+      serviceCombo.model = items;
+    }
+
+    function updateFromSelection() {
+      const item = serviceCombo.model[serviceCombo.currentIndex];
+      if (!item) return;
+
+      if (item.isPlaceholder) {
+        serviceCombo.editable = true;
+        serviceCombo.editText = "";
+        serviceCrsTextField.text = settings.custom_crs;
+        deleteButton.visible = false;
+      } else if (item.isPreset) {
+        serviceCombo.editable = false;
+        serviceCrsTextField.text = item.crs;
+        deleteButton.visible = false;
+      } else if (item.isCustom) {
+        serviceCombo.editable = false;
+        serviceCrsTextField.text = item.crs;
+        deleteButton.visible = true;
+      }
     }
 
     onOpened: {
-      settingsDialog.pendingServiceUrl = settings.service_url
-      serviceCrsTextField.text = settings.service_crs
+      loadSavedCustomEndpoints();
+      rebuildComboModel();
 
-      rebuildModel()
-      setSelectionFromUrl(settingsDialog.pendingServiceUrl)
+      let foundIndex = -1;
+
+      if (settings.selected_preset) {
+        for (let i = 0; i < serviceCombo.model.length; i++) {
+          if (serviceCombo.model[i].isPreset && serviceCombo.model[i].label === settings.selected_preset) {
+            foundIndex = i;
+            break;
+          }
+        }
+      } else if (settings.custom_url) {
+        for (let i = 0; i < serviceCombo.model.length; i++) {
+          if (serviceCombo.model[i].isCustom && serviceCombo.model[i].url === settings.custom_url) {
+            foundIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (foundIndex !== -1) {
+        serviceCombo.currentIndex = foundIndex;
+      } else {
+        serviceCombo.currentIndex = 0;
+      }
+
+      updateFromSelection();
     }
 
     ColumnLayout {
@@ -238,138 +258,39 @@ Item {
       spacing: 10
 
       Label {
-        id: serviceUrlLabel
         text: qsTr("Service URL")
         font: Theme.defaultFont
       }
 
-      QfComboBox {
-        id: serviceUrlCombo
-        Layout.fillWidth: true
-        font: Theme.defaultFont
-        model: serviceUrlModel
-        textRole: "text"
-
-        delegate: ItemDelegate {
-          width: ListView.view ? ListView.view.width : 200
-
-          contentItem: RowLayout {
-            width: parent.width
-            spacing: 10
-
-            Label {
-              Layout.fillWidth: true
-              text: model.text
-              font: Theme.defaultFont
-              elide: Text.ElideRight
-              verticalAlignment: Text.AlignVCenter
-            }
-
-            // pin icon on right only for pinned entries
-            Item {
-              visible: !model.isCustom
-              Layout.preferredWidth: 35
-              Layout.fillHeight: true
-              Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
-
-              QfToolButton {
-                width: parent.width
-                anchors.centerIn: parent
-                iconSource: Theme.getThemeVectorIcon("ic_pin_black_24dp")
-                iconColor: Theme.mainColor
-                bgcolor: "transparent"
-                enabled: false // click handled by MouseArea
-              }
-
-              MouseArea {
-                anchors.fill: parent
-                preventStealing: true
-
-                onClicked: function(mouse) {
-                  mouse.accepted = true
-                  settingsDialog.unpinUrl(model.url)
-                  mainWindow.displayToast(qsTr("Unpinned url "));
-                }
-              }
-            }
-          }
-
-          onClicked: {
-            serviceUrlCombo.currentIndex = index
-            serviceUrlCombo.popup.close()
-          }
-        }
-
-        onActivated: function(index) {
-          if (index < 0 || index >= serviceUrlModel.count)
-          {
-            return
-          }
-
-          const obj = serviceUrlModel.get(index)
-          if (!obj)
-          {
-            return
-          }
-
-          if (obj.url === "__custom__") {
-            settingsDialog.showCustomInput = true
-            customServiceUrlTextField.text = settingsDialog.pendingServiceUrl
-            customServiceUrlTextField.forceActiveFocus()
-          } else {
-            settingsDialog.pendingServiceUrl = obj.url
-            settingsDialog.showCustomInput = false
-          }
-        }
-      }
-
-      // custom input appears only if custom selected
       RowLayout {
         Layout.fillWidth: true
-        visible: settingsDialog.showCustomInput
-        spacing: 10
+        spacing: 8
 
-        TextField {
-          id: customServiceUrlTextField
+        ComboBox {
+          id: serviceCombo
           Layout.fillWidth: true
           font: Theme.defaultFont
-          text: settingsDialog.pendingServiceUrl
+          textRole: "label"
+          editable: false
 
-          onTextChanged: {
-            settingsDialog.pendingServiceUrl = settingsDialog.normalizeUrl(text)
-          }
+          onActivated: settingsDialog.updateFromSelection()
         }
 
-        // Pin icon beside custom field
-        Item {
-          Layout.preferredWidth: 45
-          Layout.preferredHeight: customServiceUrlTextField.implicitHeight
+        QfToolButton {
+          id: deleteButton
+          visible: false
+          bgcolor: "transparent"
+          iconSource: Theme.getThemeVectorIcon("ic_delete_forever_white_24dp")
+          iconColor: Theme.mainTextColor
 
-          QfToolButton {
-            width: parent.width
-            anchors.centerIn: parent
-            iconSource: Theme.getThemeVectorIcon("ic_pin_black_24dp")
-            iconColor: settingsDialog.isPinned(settingsDialog.pendingServiceUrl) ? Theme.mainTextDisabledColor : Theme.mainColor
-            bgcolor: "transparent"
-            enabled: false
-          }
-
-          MouseArea {
-            anchors.fill: parent
-            onClicked: {
-              if (settingsDialog.isPinned(settingsDialog.pendingServiceUrl)) {
-                mainWindow.displayToast(qsTr("This URL is already pinned"))
-                return
-              }
-              settingsDialog.pinUrl(settingsDialog.pendingServiceUrl)
-              mainWindow.displayToast(qsTr("Pinned URL"))
-            }
+          onClicked: {
+            settingsDialog.deleteSelectedCustom();
+            mainWindow.displayToast(qsTr("Removed URL"));
           }
         }
       }
 
       Label {
-        id: serviceCrsLabel
         text: qsTr("Service CRS")
         font: Theme.defaultFont
       }
@@ -378,14 +299,58 @@ Item {
         id: serviceCrsTextField
         Layout.fillWidth: true
         font: Theme.defaultFont
-        text: settings.service_crs
+        placeholderText: qsTr("e.g., EPSG:2056")
       }
     }
 
     onAccepted: {
-      settings.service_url = settingsDialog.pendingServiceUrl;
-      settings.service_crs = serviceCrsTextField.text;
-      mainWindow.displayToast(qsTr("Settings stored"));
+      const item = serviceCombo.model[serviceCombo.currentIndex];
+      const crs = serviceCrsTextField.text.trim();
+
+      if (!crs) {
+        mainWindow.displayToast(qsTr("CRS is required"));
+        return;
+      }
+
+      if (item.isPlaceholder) {
+        const customUrl = serviceCombo.editText.trim();
+
+        if (!customUrl) {
+          mainWindow.displayToast(qsTr("URL is required"));
+          return;
+        }
+
+        if (!isValidUrl(customUrl)) {
+          mainWindow.displayToast(qsTr("Invalid URL entered"));
+          return;
+        }
+
+        settings.selected_preset = "";
+        settings.custom_url = customUrl;
+        settings.custom_crs = crs;
+
+        saveCustomEndpoint(customUrl, crs);
+        mainWindow.displayToast(qsTr("Settings stored"));
+      } else if (item.isPreset) {
+        const presetCrsChanged = crs !== item.crs;
+
+        settings.selected_preset = item.label;
+        settings.custom_url = "";
+        settings.custom_crs = crs;
+
+        if (presetCrsChanged) {
+          mainWindow.displayToast(qsTr("Preset CRS changed"));
+        } else {
+          mainWindow.displayToast(qsTr("Settings stored"));
+        }
+      } else if (item.isCustom) {
+        settings.selected_preset = "";
+        settings.custom_url = item.url;
+        settings.custom_crs = crs;
+
+        saveCustomEndpoint(item.url, crs);
+        mainWindow.displayToast(qsTr("Settings stored"));
+      }
     }
   }
 }
