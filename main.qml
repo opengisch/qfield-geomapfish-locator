@@ -18,6 +18,14 @@ Item {
     { name: "SITN", url: "https://sitn.ne.ch/search", crs: "EPSG:2056" }
   ]
 
+  function getPresetByName(name) {
+    return presets.find(p => p.name === name);
+  }
+
+  function getActivePreset() {
+    return getPresetByName(settings.selected_preset) || presets[0];
+  }
+
   Component.onCompleted: {
     geoMapFishLocatorFilter.locatorBridge.registerQFieldLocatorFilter(geoMapFishLocatorFilter);
   }
@@ -31,21 +39,9 @@ Item {
     category: "qfield-geomapfish-locator"
 
     property string selected_preset: "GeoMapFish Demo"
-    property string custom_url: ""
-    property string custom_crs: "EPSG:2056"
+    property string service_url: ""
+    property string service_crs: ""
     property string saved_custom_endpoints: "[]"
-  }
-
-  function getActivePreset() {
-    return presets.find(p => p.name === settings.selected_preset) || presets[0];
-  }
-
-  function getActiveUrl() {
-    return settings.custom_url || getActivePreset().url;
-  }
-
-  function getActiveCrs() {
-    return settings.custom_url ? settings.custom_crs : getActivePreset().crs;
   }
 
   function configure() {
@@ -59,8 +55,8 @@ Item {
     prefix: "gmf"
     locatorBridge: iface.findItemByObjectName('locatorBridge')
     parameters: {
-      "service_url": plugin.getActiveUrl(),
-      "service_crs": plugin.getActiveCrs()
+      "service_url": settings.service_url || plugin.getActivePreset().url,
+      "service_crs": settings.service_crs || plugin.getActivePreset().crs
     }
     source: Qt.resolvedUrl('geomapfish.qml')
 
@@ -117,140 +113,70 @@ Item {
     width: mainWindow.width * 0.8
 
     property var savedCustomEndpoints: []
-    property string customPlaceholder: "Custom"
 
-    function loadSavedCustomEndpoints() {
+    function loadCustomEndpoints() {
       try {
-        const parsed = JSON.parse(settings.saved_custom_endpoints);
-        savedCustomEndpoints = Array.isArray(parsed) ? parsed : [];
+        savedCustomEndpoints = JSON.parse(settings.saved_custom_endpoints);
+        if (!Array.isArray(savedCustomEndpoints)) savedCustomEndpoints = [];
       } catch (e) {
         savedCustomEndpoints = [];
       }
     }
 
-    function findPreset(name) {
-      return presets.find(p => p.name === name);
-    }
-
-    function findCustomEndpoint(url) {
-      return savedCustomEndpoints.find(e => e.url === url);
-    }
-
-    function isValidUrl(url) {
-      return url.startsWith("http://") || url.startsWith("https://");
-    }
-
     function saveCustomEndpoint(url, crs) {
-      if (!url || !isValidUrl(url)) return;
-
       savedCustomEndpoints = savedCustomEndpoints.filter(e => e.url !== url);
       savedCustomEndpoints.unshift({ url: url, crs: crs });
-
-      if (savedCustomEndpoints.length > 10) {
-        savedCustomEndpoints = savedCustomEndpoints.slice(0, 10);
-      }
-
+      if (savedCustomEndpoints.length > 10) savedCustomEndpoints.length = 10;
       settings.saved_custom_endpoints = JSON.stringify(savedCustomEndpoints);
     }
 
-    function deleteSelectedCustom() {
-      const item = serviceCombo.model[serviceCombo.currentIndex];
-      if (!item || !item.isCustom) return;
-
-      savedCustomEndpoints = savedCustomEndpoints.filter(e => e.url !== item.url);
+    function deleteCustomEndpoint() {
+      const selected = endpointCombo.model[endpointCombo.currentIndex];
+      savedCustomEndpoints = savedCustomEndpoints.filter(e => e.url !== selected.url);
       settings.saved_custom_endpoints = JSON.stringify(savedCustomEndpoints);
-
-      rebuildComboModel();
-      serviceCombo.currentIndex = serviceCombo.model.length - 1;
-      updateFromSelection();
+      populateEndpoints();
+      endpointCombo.currentIndex = endpointCombo.model.length - 1;
+      updateFields();
     }
 
-    function rebuildComboModel() {
+    function populateEndpoints() {
       let items = [];
 
-      presets.forEach(preset => {
-        items.push({
-          label: preset.name,
-          url: preset.url,
-          crs: preset.crs,
-          isPreset: true,
-          isCustom: false,
-          isPlaceholder: false
-        });
-      });
+      presets.forEach(p => items.push({ name: p.name, url: p.url, crs: p.crs, isCustom: false }));
+      savedCustomEndpoints.forEach(e => items.push({ name: e.url, url: e.url, crs: e.crs, isCustom: true }));
+      items.push({ name: qsTr("Custom"), url: "", crs: "", isCustom: false });
 
-      savedCustomEndpoints.forEach(endpoint => {
-        items.push({
-          label: endpoint.url,
-          url: endpoint.url,
-          crs: endpoint.crs,
-          isPreset: false,
-          isCustom: true,
-          isPlaceholder: false
-        });
-      });
-
-      items.push({
-        label: customPlaceholder,
-        url: "",
-        crs: settings.custom_crs,
-        isPreset: false,
-        isCustom: false,
-        isPlaceholder: true
-      });
-
-      serviceCombo.model = items;
+      endpointCombo.model = items;
     }
 
-    function updateFromSelection() {
-      const item = serviceCombo.model[serviceCombo.currentIndex];
-      if (!item) return;
+    function updateFields() {
+      const selected = endpointCombo.model[endpointCombo.currentIndex];
+      const isCustomNew = !selected.url;
 
-      if (item.isPlaceholder) {
-        serviceCombo.editable = true;
-        serviceCombo.editText = "";
-        serviceCrsTextField.text = settings.custom_crs;
-        deleteButton.visible = false;
-      } else if (item.isPreset) {
-        serviceCombo.editable = false;
-        serviceCrsTextField.text = item.crs;
-        deleteButton.visible = false;
-      } else if (item.isCustom) {
-        serviceCombo.editable = false;
-        serviceCrsTextField.text = item.crs;
-        deleteButton.visible = true;
+      serviceUrlTextField.visible = isCustomNew;
+      deleteButton.visible = selected.isCustom;
+
+      if (isCustomNew) {
+        serviceUrlTextField.text = "";
+        serviceCrsTextField.text = settings.service_crs || plugin.getActivePreset().crs;
+      } else {
+        serviceCrsTextField.text = selected.crs;
       }
     }
 
     onOpened: {
-      loadSavedCustomEndpoints();
-      rebuildComboModel();
+      loadCustomEndpoints();
+      populateEndpoints();
 
-      let foundIndex = -1;
-
-      if (settings.selected_preset) {
-        for (let i = 0; i < serviceCombo.model.length; i++) {
-          if (serviceCombo.model[i].isPreset && serviceCombo.model[i].label === settings.selected_preset) {
-            foundIndex = i;
-            break;
-          }
-        }
-      } else if (settings.custom_url) {
-        for (let i = 0; i < serviceCombo.model.length; i++) {
-          if (serviceCombo.model[i].isCustom && serviceCombo.model[i].url === settings.custom_url) {
-            foundIndex = i;
-            break;
-          }
-        }
+      let index = 0;
+      if (settings.service_url) {
+        index = endpointCombo.model.findIndex(m => m.url === settings.service_url);
+      } else if (settings.selected_preset) {
+        index = endpointCombo.model.findIndex(m => m.name === settings.selected_preset);
       }
 
-      if (foundIndex !== -1) {
-        serviceCombo.currentIndex = foundIndex;
-      } else {
-        serviceCombo.currentIndex = 0;
-      }
-
-      updateFromSelection();
+      endpointCombo.currentIndex = index !== -1 ? index : 0;
+      updateFields();
     }
 
     ColumnLayout {
@@ -258,6 +184,7 @@ Item {
       spacing: 10
 
       Label {
+        id: serviceUrlLabel
         text: qsTr("Service URL")
         font: Theme.defaultFont
       }
@@ -267,13 +194,11 @@ Item {
         spacing: 8
 
         ComboBox {
-          id: serviceCombo
+          id: endpointCombo
           Layout.fillWidth: true
           font: Theme.defaultFont
-          textRole: "label"
-          editable: false
-
-          onActivated: settingsDialog.updateFromSelection()
+          textRole: "name"
+          onActivated: settingsDialog.updateFields()
         }
 
         QfToolButton {
@@ -282,15 +207,23 @@ Item {
           bgcolor: "transparent"
           iconSource: Theme.getThemeVectorIcon("ic_delete_forever_white_24dp")
           iconColor: Theme.mainTextColor
-
           onClicked: {
-            settingsDialog.deleteSelectedCustom();
+            settingsDialog.deleteCustomEndpoint();
             mainWindow.displayToast(qsTr("Removed URL"));
           }
         }
       }
 
+      TextField {
+        id: serviceUrlTextField
+        Layout.fillWidth: true
+        font: Theme.defaultFont
+        visible: false
+        placeholderText: qsTr("e.g., https://example.com/search")
+      }
+
       Label {
+        id: serviceCrsLabel
         text: qsTr("Service CRS")
         font: Theme.defaultFont
       }
@@ -304,7 +237,7 @@ Item {
     }
 
     onAccepted: {
-      const item = serviceCombo.model[serviceCombo.currentIndex];
+      const selected = endpointCombo.model[endpointCombo.currentIndex];
       const crs = serviceCrsTextField.text.trim();
 
       if (!crs) {
@@ -312,45 +245,47 @@ Item {
         return;
       }
 
-      if (item.isPlaceholder) {
-        const customUrl = serviceCombo.editText.trim();
-
-        if (!customUrl) {
+      // Custom new entry
+      if (!selected.url) {
+        const url = serviceUrlTextField.text.trim();
+        if (!url) {
           mainWindow.displayToast(qsTr("URL is required"));
           return;
         }
-
-        if (!isValidUrl(customUrl)) {
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
           mainWindow.displayToast(qsTr("Invalid URL entered"));
           return;
         }
 
         settings.selected_preset = "";
-        settings.custom_url = customUrl;
-        settings.custom_crs = crs;
-
-        saveCustomEndpoint(customUrl, crs);
+        settings.service_url = url;
+        settings.service_crs = crs;
+        saveCustomEndpoint(url, crs);
         mainWindow.displayToast(qsTr("Settings stored"));
-      } else if (item.isPreset) {
-        const presetCrsChanged = crs !== item.crs;
+        return;
+      }
 
-        settings.selected_preset = item.label;
-        settings.custom_url = "";
-        settings.custom_crs = crs;
+      // Preset selected
+      if (!selected.isCustom) {
+        const preset = plugin.getPresetByName(selected.name);
+        settings.selected_preset = selected.name;
+        settings.service_url = "";
+        settings.service_crs = crs;
 
-        if (presetCrsChanged) {
+        if (preset && crs !== preset.crs) {
           mainWindow.displayToast(qsTr("Preset CRS changed"));
         } else {
           mainWindow.displayToast(qsTr("Settings stored"));
         }
-      } else if (item.isCustom) {
-        settings.selected_preset = "";
-        settings.custom_url = item.url;
-        settings.custom_crs = crs;
-
-        saveCustomEndpoint(item.url, crs);
-        mainWindow.displayToast(qsTr("Settings stored"));
+        return;
       }
+
+      // Custom saved entry
+      settings.selected_preset = "";
+      settings.service_url = selected.url;
+      settings.service_crs = crs;
+      saveCustomEndpoint(selected.url, crs);
+      mainWindow.displayToast(qsTr("Settings stored"));
     }
   }
 }
