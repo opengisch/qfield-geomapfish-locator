@@ -131,32 +131,31 @@ Item {
     }
 
     function deleteFromHistory() {
-      const url = serviceUrlTextField.editText.trim();
+      const url = customUrlCombo.editText.trim();
       urlHistory = urlHistory.filter(e => e.url !== url);
       settings.service_endpoint_history = JSON.stringify(urlHistory);
-      populateUrlCombo();
+      updateCustomUrlCombo();
     }
 
-    function populateEndpointCombo() {
-      let items = presets.map(p => p.name);
-      items.push(qsTr("Custom"));
-      endpointCombo.model = items;
-    }
-
-    function populateUrlCombo() {
-      serviceUrlTextField.model = urlHistory.map(e => e.url);
+    function updateCustomUrlCombo() {
+      customUrlCombo.model = urlHistory.map(e => e.url);
     }
 
     function updateUI() {
       const isCustom = endpointCombo.currentText === qsTr("Custom");
 
-      serviceUrlLabel.visible = isCustom;
-      serviceUrlTextField.visible = isCustom;
-      deleteButton.visible = isCustom;
+      customUrlRow.visible = isCustom;
 
       if (isCustom) {
-        populateUrlCombo();
-        const currentUrl = serviceUrlTextField.editText.trim();
+        Qt.callLater(() => {
+          customUrlCombo.forceActiveFocus();
+          Qt.inputMethod.show();
+        });
+      }
+
+      if (isCustom) {
+        updateCustomUrlCombo();
+        const currentUrl = customUrlCombo.editText.trim();
         const saved = urlHistory.find(e => e.url === currentUrl);
         serviceCrsTextField.text = saved ? saved.crs : (settings.service_crs || plugin.getActivePreset().crs);
       } else {
@@ -169,12 +168,15 @@ Item {
 
     onOpened: {
       loadHistory();
-      populateEndpointCombo();
+
+      let endpointItems = presets.map(p => p.name);
+      endpointItems.push(qsTr("Custom"));
+      endpointCombo.model = endpointItems;
 
       const isCustom = settings.service_url !== "";
       if (isCustom) {
-        endpointCombo.currentIndex = endpointCombo.model.indexOf(qsTr("Custom"));
-        serviceUrlTextField.editText = settings.service_url;
+        endpointCombo.currentIndex = endpointCombo.model.length - 1;
+        customUrlCombo.editText = settings.service_url;
       } else {
         const idx = endpointCombo.model.indexOf(settings.service_endpoint);
         endpointCombo.currentIndex = idx !== -1 ? idx : 0;
@@ -201,12 +203,13 @@ Item {
       }
 
       RowLayout {
+        id: customUrlRow
         Layout.fillWidth: true
         spacing: 8
-        visible: serviceUrlTextField.visible
+        visible: false
 
         ComboBox {
-          id: serviceUrlTextField
+          id: customUrlCombo
           Layout.fillWidth: true
           font: Theme.defaultFont
           editable: true
@@ -250,7 +253,7 @@ Item {
       const isCustom = endpointCombo.currentText === qsTr("Custom");
 
       if (isCustom) {
-        const url = serviceUrlTextField.editText.trim();
+        const url = customUrlCombo.editText.trim();
         if (!url) {
           mainWindow.displayToast(qsTr("URL is required"));
           return;
