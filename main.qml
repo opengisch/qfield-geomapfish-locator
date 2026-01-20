@@ -39,9 +39,9 @@ Item {
     category: "qfield-geomapfish-locator"
 
     property string service_endpoint: "GeoMapFish Demo"
-    property string service_url: ""
     property string service_crs: ""
-    property string service_endpoint_history: "[]"
+    property string service_custom_url: ""
+    property string service_custom_url_history: "[]"
   }
 
   function configure() {
@@ -55,7 +55,7 @@ Item {
     prefix: "gmf"
     locatorBridge: iface.findItemByObjectName('locatorBridge')
     parameters: {
-      "service_url": settings.service_url || plugin.getActivePreset().url,
+      "service_custom_url": settings.service_custom_url || plugin.getActivePreset().url,
       "service_crs": settings.service_crs || plugin.getActivePreset().crs
     }
     source: Qt.resolvedUrl('geomapfish.qml')
@@ -116,7 +116,7 @@ Item {
 
     function loadHistory() {
       try {
-        urlHistory = JSON.parse(settings.service_endpoint_history);
+        urlHistory = JSON.parse(settings.service_custom_url_history);
         if (!Array.isArray(urlHistory)) urlHistory = [];
       } catch (e) {
         urlHistory = [];
@@ -127,13 +127,13 @@ Item {
       urlHistory = urlHistory.filter(e => e.url !== url);
       urlHistory.unshift({ url: url, crs: crs });
       if (urlHistory.length > 10) urlHistory.length = 10;
-      settings.service_endpoint_history = JSON.stringify(urlHistory);
+      settings.service_custom_url_history = JSON.stringify(urlHistory);
     }
 
     function deleteFromHistory() {
       const url = customUrlCombo.editText.trim();
       urlHistory = urlHistory.filter(e => e.url !== url);
-      settings.service_endpoint_history = JSON.stringify(urlHistory);
+      settings.service_custom_url_history = JSON.stringify(urlHistory);
       updateCustomUrlCombo();
     }
 
@@ -173,10 +173,10 @@ Item {
       endpointItems.push(qsTr("Custom"));
       endpointCombo.model = endpointItems;
 
-      const isCustom = settings.service_url !== "";
+      const isCustom = settings.service_custom_url !== "";
       if (isCustom) {
         endpointCombo.currentIndex = endpointCombo.model.length - 1;
-        customUrlCombo.editText = settings.service_url;
+        customUrlCombo.editText = settings.service_custom_url;
       } else {
         const idx = endpointCombo.model.indexOf(settings.service_endpoint);
         endpointCombo.currentIndex = idx !== -1 ? idx : 0;
@@ -264,14 +264,14 @@ Item {
         }
 
         settings.service_endpoint = "Custom";
-        settings.service_url = url;
+        settings.service_custom_url = url;
         settings.service_crs = crs;
         saveToHistory(url, crs);
         mainWindow.displayToast(qsTr("Settings stored"));
       } else {
         const preset = plugin.getPresetByName(endpointCombo.currentText);
         settings.service_endpoint = endpointCombo.currentText;
-        settings.service_url = "";
+        settings.service_custom_url = "";
         settings.service_crs = crs;
 
         if (preset && crs !== preset.crs) {
