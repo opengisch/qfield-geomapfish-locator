@@ -55,7 +55,7 @@ Item {
     prefix: "gmf"
     locatorBridge: iface.findItemByObjectName('locatorBridge')
     parameters: {
-      "service_custom_url": settings.service_custom_url || plugin.getActivePreset().url,
+      "service_url": settings.service_custom_url || plugin.getActivePreset().url,
       "service_crs": settings.service_crs || plugin.getActivePreset().crs
     }
     source: Qt.resolvedUrl('geomapfish.qml')
@@ -143,21 +143,18 @@ Item {
 
     function updateUI() {
       const isCustom = endpointCombo.currentText === qsTr("Custom");
-
       customUrlRow.visible = isCustom;
-
-      if (isCustom) {
-        Qt.callLater(() => {
-          customUrlCombo.forceActiveFocus();
-          Qt.inputMethod.show();
-        });
-      }
 
       if (isCustom) {
         updateCustomUrlCombo();
         const currentUrl = customUrlCombo.editText.trim();
         const saved = urlHistory.find(e => e.url === currentUrl);
         serviceCrsTextField.text = saved ? saved.crs : (settings.service_crs || plugin.getActivePreset().crs);
+
+        Qt.callLater(() => {
+          customUrlCombo.forceActiveFocus();
+          Qt.inputMethod.show();
+        });
       } else {
         const preset = plugin.getPresetByName(endpointCombo.currentText);
         if (preset) {
