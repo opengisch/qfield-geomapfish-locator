@@ -107,7 +107,7 @@ Item {
     modal: true
     font: Theme.defaultFont
     standardButtons: Dialog.Ok | Dialog.Cancel
-    title: qsTr("GeoMapFish search settings")
+    title: qsTr("GeoMapFish Search Settings")
     x: (mainWindow.width - width) / 2
     y: (mainWindow.height - height) / 2
     width: mainWindow.width * 0.8
@@ -236,6 +236,18 @@ Item {
         Layout.fillWidth: true
         font: Theme.defaultFont
         placeholderText: qsTr("e.g., EPSG:2056")
+      }
+
+      Label {
+        Layout.fillWidth: true
+        Layout.topMargin: 10
+        Layout.bottomMargin: 10
+        font: Theme.defaultFont
+        color: Theme.secondaryTextColor
+        wrapMode: Text.WordWrap
+        text: qsTr("GeoMapFish is an open source project allowing you to build rich and extensible WebGIS applications. To know more about it, <a href=\"https://geomapfish.org/\">visit its website</a>.")
+
+        onLinkActivated: link => { Qt.openUrlExternally(link); }
       }
     }
 
