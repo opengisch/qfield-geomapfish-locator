@@ -3,5 +3,5 @@ name=GeoMapFish Locator
 description=Adds GeoMapFish services into the search bar
 author=OPENGIS.ch
 icon=icon.svg
-version=1.4
+version=1.5
 homepage=https://www.opengis.ch/
